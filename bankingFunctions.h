@@ -19,20 +19,7 @@ struct BankAccount {
     int rowNumber;
 } typedef BankAccount;
 
-// Creating a FILE object to open the userInfo.txt
-FILE * userInfoFile;
-FILE * tempFile;
-
-static BankAccount * globalBankAccount;
-
-char * tempUsername;
-
-void banking(void);
-BankAccount * updateCSV(int updateSavingsChecking, int depositWithdrawValue, BankAccount * tempAccount);
-BankAccount * accountInformation(char * username);
-
-static int sqlite3Callback(void * unused, int count, char **data, char **columns);
-void *accountInformationSql(char * username, sqlite3 * dataBase);
-void * updateAccountInformationSql(char * username, char * column, int value, sqlite3 * dataBase);
-void * updateBankAccount(bool updateSavings, int value, sqlite3 * dataBase);
+void *accountInformationSql(const char * username, sqlite3 * dataBase);
+void * updateAccountInformationSql(const char * username, const char * columnName, const int value, sqlite3 * dataBase);
+void * updateBankAccount(const bool updateSavings, const int value, sqlite3 * dataBase);
 void bankingSql(void);

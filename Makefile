@@ -1,4 +1,5 @@
-CFLAGS = -std=gnu99 -Wall
+CFLAGS = -std=gnu17 -Wall -O3
+CFLAGS_DEBUG = -std=gnu17 -Wall
 C++FLAGS = -std=c++0x
 INCLUDES = -I/home/jwsv61099/workspace/libraries/cunit/CUnit/
 LIBS = -lsqlite3
@@ -6,15 +7,16 @@ TEST_LIBS = -L/home/jwsv61099/workspace/libraries/cunit/local-build/CUnit/ -lcun
 SOURCES= banking.c bankingFunctions.c
 OBJECTS=$(patsubst %.c,%.o,$(SOURCES))
 OUT = banking.exe
+OUT_DEBUG = banking_debug.exe
 OUT_TEST = bankingTest.exe
 
 default: 
-	# Compiling the C files into object files
-	rm -f *.o
+# Compiling the C files into object files
 	gcc $(CFLAGS) -o bankingFunctions.o -c bankingFunctions.c
 	gcc $(CFLAGS) -o banking.o -c banking.c
-	# Linking the object files together with the libraries  
+# Linking the object files together with the libraries  
 	g++ *.o -o $(OUT) $(LIBS)
+	rm -f *.o
 test:
 	rm -f *.o
 # gcc $(CFLAGS) -o bankingFunctions.o -c bankingFunctions.c
@@ -27,7 +29,7 @@ debug:
 # gcc $(CFLAGS) -o banking.o -c -g banking.c
 # # Linking the object files together with the libraries  
 # g++ *.o -g -o $(OUT) $(LIBS)
-	gcc $(CFLAGS) -g banking.c bankingFunctions.c $(LIBS) -o $(OUT)
+	gcc $(CFLAGS_DEBUG) -g banking.c bankingFunctions.c $(LIBS) -o $(OUT_DEBUG)
 debug_test:
 	rm -f *.o
 	gcc $(CFLAGS) -o bankingFunctions.o -c -g bankingFunctions.c
