@@ -11,7 +11,19 @@ void trim(char * s) {
     while(* p && isspace(* p)) ++p, --l;
 
     memmove(s, p, l + 1);
-} 
+}
+
+/**
+ * @brief Helper function to check if a pointer has been set to NULL; if it is not, then free it
+ * 
+ * @param obj The object which we want freed!
+ */
+void destoryObj(void ** obj) {
+    if(*obj != NULL) {
+        free(*obj);
+        *obj = NULL;
+    }
+}
 
 /**
  * @brief The callback funciton that the sqlite3_exec function is going to use
@@ -25,19 +37,20 @@ void trim(char * s) {
  */
 static int sqlite3Callback(void * unused, int count, char **data, char **columns) {
     // Since the size of the table is fixed, we can simply add all of the data into the loop
-    // printf("We made it in the callback function!\n");
-    // printf("Username Chars %c, %c, %c, %c, %c\n", data[0][0], data[0][1], data[0][2], data[0][3], data[0][4]);
-    globalBankAccount->username = (char *)malloc((strlen(data[0]) + 1) * sizeof(char));
+    const int lenUsername = strlen(data[0]);
+    globalBankAccount->username = (char *)malloc((lenUsername + 1) * sizeof(char));
+    memset(globalBankAccount->username, '\0', lenUsername + 1);
+    
     globalBankAccount->password = (char *)malloc((strlen(data[1]) + 1) * sizeof(char));
-    strcpy(globalBankAccount->username, data[0]);
-    strcpy(globalBankAccount->password, data[1]);
-    // globalBankAccount->username = data[0];
-    // globalBankAccount->password = data[1];
+    memset(globalBankAccount->username, '\0', lenUsername + 1);
+
+    strncpy(globalBankAccount->username, data[0], lenUsername);
+    strncpy(globalBankAccount->password, data[1], strlen(data[1]));
+
     char * end;
     globalBankAccount->savingsAccountBalance = strtod(data[2], &end);
     globalBankAccount->checkingAccountBalance = strtod(data[3], &end);
     globalBankAccount->interest = strtof(data[4], &end);      
-    // printf("Callback: Username: %s | Password: (%s)| Savings: %f | Checking: %f | Interest: %f\n", globalBankAccount->username, globalBankAccount->password, globalBankAccount->savingsAccountBalance, globalBankAccount->checkingAccountBalance, globalBankAccount->interest);            
 
     return 0;
 }
@@ -54,11 +67,7 @@ void *accountInformationSql(const char * username, sqlite3 * dataBase) {
     char * query = sqlite3_mprintf("SELECT * FROM USER_INFO where USERNAME = '%s'", username);
     char * getAccountInfoErr = 0;
     sqlite3_exec(dataBase, query, sqlite3Callback, NULL, &getAccountInfoErr);
-    if(getAccountInfoErr != NULL) {
-        printf("Your account information was not found.\n");
-        globalBankAccount->username = 0;
-    }
-    // printf("Account Information: Username: %s | Password: (%s)| Savings: %f | Checking: %f | Interest: %f\n", globalBankAccount->username, globalBankAccount->password, globalBankAccount->savingsAccountBalance, globalBankAccount->checkingAccountBalance, globalBankAccount->interest);
+    // TODO: Maybe handle error?
 
     return 0;
 } 
@@ -72,41 +81,49 @@ void *accountInformationSql(const char * username, sqlite3 * dataBase) {
  * @param dataBase The database pointer
  * @return void* 
  */
-void * updateAccountInformationSql(const char * username, const char * columnName, const int value, sqlite3 * dataBase) {
-    const char * query = sqlite3_mprintf("UPDATE USER_INFO SET %s = '%d' WHERE USERNAME = '%s'", columnName, value, username);
-    sqlite3_exec(dataBase, query, NULL, NULL, NULL);
+void * updateAccountInformationSql(const char * username, const char * columnName, const double value, sqlite3 * dataBase) {
+    const char * query = sqlite3_mprintf("UPDATE USER_INFO SET %s = '%lf' WHERE USERNAME = '%s'", columnName, value, username);
+    char * errMsg;
+    sqlite3_exec(dataBase, query, NULL, NULL, &errMsg);
     return 0;
 }
 
 /**
  * @brief This is going to update the global bank account
  * 
- * @param updateSavings If this is 0 then we are going to update the savings account; if it is 1 then we are going to update the checking account
+ * @param characteristics If this is 0 then we are going to update the savings account; if it is 1 then we are going to update the checking account
  * @param value The value that the user has entered to either deposit (+) or withdraw (-)
  * @return void* 
  */
-void * updateBankAccount(const bool updateSavings, const int value, sqlite3 * dataBase) {
-    if(updateSavings == 0){
+void * updateBankAccount(enum BankCharacteristics characteristics,  const double value, sqlite3 * dataBase) {
+    if(characteristics == SAVINGS){
         if(globalBankAccount->savingsAccountBalance + value < 0){
             printf("You cannot withdraw more than you have in your savings account.\n");
         } else {
             globalBankAccount->savingsAccountBalance += value;
             printf("Your new savings account balance is $%.2f.\n", globalBankAccount->savingsAccountBalance);
-            updateAccountInformationSql(globalBankAccount->username, "SAVINGS", globalBankAccount->savingsAccountBalance, dataBase);
+            updateAccountInformationSql(globalBankAccount->username, "SAVINGS_ACCOUNT_BALANCE", globalBankAccount->savingsAccountBalance, dataBase);
         }
-    } else if (updateSavings == 1) {
+    } else if (characteristics == CHECKING) {
         if(globalBankAccount->checkingAccountBalance + value < 0){
             printf("You cannot withdraw more than you have in your checking account.\n");
         } else {
             globalBankAccount->checkingAccountBalance += value;
             printf("Your new checking account balance is $%.2f.\n", globalBankAccount->checkingAccountBalance);
-            updateAccountInformationSql(globalBankAccount->username, "CHECKING", globalBankAccount->checkingAccountBalance, dataBase);
+            updateAccountInformationSql(globalBankAccount->username, "CHECKING_ACCOUNT_BALANCE", globalBankAccount->checkingAccountBalance, dataBase);
         }
     }
 
     return 0;
 }
 
+/**
+ * @brief This function goes through and creates a bank account for the user
+ * 
+ * @param dataBase The database pointer to be able to execute db commands
+ * @return true 
+ * @return false 
+ */
 bool createAccount(sqlite3 * dataBase) {
     // Buffers for the user to type in the their username and password
     char usernameInput[20];
@@ -118,17 +135,19 @@ bool createAccount(sqlite3 * dataBase) {
     while(!userNameExists){
         printf(BOLD(CYN("Username:\n")));
         // The user is going to enter a username on the terminal, and it will be attached to this buffer
-        scanf("%20s", usernameInput);
+        scanf("%19s", usernameInput);
         accountInformationSql(usernameInput, dataBase);
-        if(globalBankAccount->username == 0){
+        if(globalBankAccount->username == NULL){
             // Time to add stuff to the CSV
-            globalBankAccount->username = (char *)malloc((strlen(usernameInput) + 1) * sizeof(char));
-            globalBankAccount->username = usernameInput;
+            globalBankAccount->username = (char *)malloc((strlen(usernameInput)) * sizeof(char));
+            strncpy(globalBankAccount->username, usernameInput, strlen(usernameInput));
+
             // Since the account does not exist in the DB, we are prompting the user to enter a password
             printf(BOLD(CYN("Password:\n")));
-            scanf("%20s", passwordInput);
-            globalBankAccount->password = (char *)malloc((strlen(passwordInput) + 1) * sizeof(char));
-            globalBankAccount->password = passwordInput;
+            scanf("%19s", passwordInput);
+            globalBankAccount->password = (char *)malloc((strlen(passwordInput)) * sizeof(char));
+            strncpy(globalBankAccount->password, passwordInput, strlen(passwordInput));
+
             globalBankAccount->savingsAccountBalance = 0.0;
             globalBankAccount->checkingAccountBalance = 0.0;
             // Interest is the amount applied to the savings account at the end of every month
@@ -147,6 +166,13 @@ bool createAccount(sqlite3 * dataBase) {
     return loggedIn;
 }
 
+/**
+ * @brief Attempts to log into an account the user enters.
+ * 
+ * @param dataBase The database pointer to be able to execute db commands
+ * @return true 
+ * @return false 
+ */
 bool loginToAccount(sqlite3 * dataBase) {
     // Buffers for the user to type in the their username and password
     char usernameInput[20];
@@ -158,25 +184,23 @@ bool loginToAccount(sqlite3 * dataBase) {
 
     while(!userNameExists){
         printf(BOLD(CYN("Login:\nUsername:\n")));
-        scanf("%s", usernameInput);
+        scanf("%19s", usernameInput);
         // We want to Query the SQL DB for this username
         accountInformationSql(usernameInput, dataBase);
-        //printf("Account Values: %s, %s, %f, %f, %f\n", globalBankAccount->username, globalBankAccount->password, globalBankAccount->savingsAccountBalance, globalBankAccount->checkingAccountBalance, globalBankAccount->interest);
-        if(globalBankAccount->username != NULL){
-            // Time to add stuff to the CSV
+        if(globalBankAccount->username != NULL) {
             userNameExists = true;
             int passwordAttempts = 0;
             while(!passwordInputCorrect){
                 printf(BOLD(CYN("Password:\n")));
-                scanf("%s", passwordInput);
-                if(!strcmp(passwordInput, globalBankAccount->password)){
+                scanf("%19s", passwordInput);
+                if(!strncmp(passwordInput, globalBankAccount->password, strlen(passwordInput))) {
                     // Print out a few different options
                     printf(BLU("You are now logged in.\n"));
                     passwordInputCorrect = true;
                     loggedIn = true;
                 } else {
                     passwordAttempts++;
-                    if(passwordAttempts == 3){
+                    if(passwordAttempts == 3) {
                         printf(BOLD(RED("Your account is now locked for 15 minutes.\n")));
                         exit(1);
                     } else {
@@ -194,20 +218,32 @@ bool loginToAccount(sqlite3 * dataBase) {
 
 /**
  * @brief The function that is running this Bank Account Program
- * 
  */
 void bankingSql(void) {
     sqlite3 * dataBase = NULL;
     sqlite3_open("userInfo.db", &dataBase);
+
+    // We need to now create the table in the database, assuming it doesn't already exist.
+    char * errMsg;
+    const char * createTable = "CREATE TABLE IF NOT EXISTS USER_INFO("
+                               "USERNAME TEXT PRIMARY KEY NOT NULL,"
+                               "PASSWORD TEXT NOT NULL,"
+                               "SAVINGS_ACCOUNT_BALANCE DOUBLE NOT NULL,"
+                               "CHECKING_ACCOUNT_BALANCE DOUBLE NOT NULL,"
+                               "INTEREST FLOAT NOT NULL);";
+    sqlite3_exec(dataBase, createTable, NULL, NULL, &errMsg);
+
     globalBankAccount = (BankAccount *)malloc(sizeof(BankAccount));
-    int userOptions;
+    globalBankAccount->username = NULL;
+    globalBankAccount->password = NULL;
+    int userOptions = 0;
 
     // Different booleans used throughout the code
     bool userInputIncorrect = false;
     bool loggedIn = false;
     bool amountPositive = false;
 
-    double amount;
+    double amount = 0.0;
     
     // Want to start the app up with a greeting
     printf(BOLD(MAG("Welcome to the bank. How may I help you?")));
@@ -222,7 +258,7 @@ void bankingSql(void) {
         } else if (userOptions == 3) {
             printf(YEL("Thank you for using the Bank App. Have a wonderful day!\n"));
             exit(1);
-        }else {
+        } else {
             printf("That is not a correct input. Input 1 or 2.\n");
         }
     }
@@ -235,7 +271,7 @@ void bankingSql(void) {
     }
 
     // Now that the user is logged in, they need to be able to do some things
-    int loggedInInput;
+    int loggedInInput = 0;
     
     printf("1: View Savings Account Balance\n2: View Checking Account Balance\n3: Deposit Money into Savings Account\n4: Deposit Money into Checking Account\n5: Withdraw Money from Savings Account\n6: Withdraw Money from Checking Account\n7: Logout\n");
     while(loggedIn){
@@ -260,7 +296,7 @@ void bankingSql(void) {
                     amountPositive = true;
                 }
             }
-            updateBankAccount(0, amount, dataBase);
+            updateBankAccount(SAVINGS, amount, dataBase);
             break;
         case 4:
             printf("How much do you want to deposit?\n");
@@ -272,7 +308,7 @@ void bankingSql(void) {
                     amountPositive = true;
                 }
             }
-            updateBankAccount(1, amount, dataBase);
+            updateBankAccount(CHECKING, amount, dataBase);
             break;
         case 5:
             printf("How much do you want to withdraw?\n");
@@ -280,7 +316,7 @@ void bankingSql(void) {
             if(amount > 0){
                 amount *= -1;
             } 
-            updateBankAccount(0, amount, dataBase);
+            updateBankAccount(SAVINGS, amount, dataBase);
             break;
         case 6:
             printf("How much do you want to withdraw?\n");
@@ -288,10 +324,10 @@ void bankingSql(void) {
             if(amount > 0){
                 amount *= -1;
             }
-            updateBankAccount(1, amount, dataBase);
+            updateBankAccount(CHECKING, amount, dataBase);
             break;        
         case 7:
-            printf("You are now logged out.");
+            printf("You are now logged out.\n");
             loggedIn = false;
             break;
         default:
@@ -300,8 +336,12 @@ void bankingSql(void) {
             break;
         }
     }
-    free(globalBankAccount->username);
-    free(globalBankAccount->password);
-    free(globalBankAccount);
-    exit(0);
+
+    destoryObj((void **)&globalBankAccount->username);
+    destoryObj((void **)&globalBankAccount->password);
+    destoryObj((void **)&globalBankAccount);
+
+    sqlite3_close(dataBase);
+    
+    exit(EXIT_SUCCESS);
 }

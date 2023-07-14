@@ -2,3 +2,4 @@
 *.exe
 valgrind-out.txt
 test.csv
+userInfo.db

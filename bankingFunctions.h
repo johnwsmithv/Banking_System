@@ -19,7 +19,13 @@ struct BankAccount {
     int rowNumber;
 } typedef BankAccount;
 
+enum BankCharacteristics {
+    SAVINGS,
+    CHECKING,
+    INTEREST
+};
+
 void *accountInformationSql(const char * username, sqlite3 * dataBase);
-void * updateAccountInformationSql(const char * username, const char * columnName, const int value, sqlite3 * dataBase);
-void * updateBankAccount(const bool updateSavings, const int value, sqlite3 * dataBase);
+void * updateAccountInformationSql(const char * username, const char * columnName, const double value, sqlite3 * dataBase);
+void * updateBankAccount(enum BankCharacteristics characteristics, const double value, sqlite3 * dataBase);
 void bankingSql(void);
