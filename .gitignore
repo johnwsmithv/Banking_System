@@ -1,5 +1,4 @@
-*.o
-*.exe
+build/
 valgrind-out.txt
 test.csv
 userInfo.db

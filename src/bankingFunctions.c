@@ -1,5 +1,9 @@
 #include "bankingFunctions.h"
 
+#ifndef PROJECT_DIR
+    #define PROJECT_DIR ""
+#endif
+
 static BankAccount * globalBankAccount;
 
 // Little Trim function from StackOverflow
@@ -62,14 +66,12 @@ static int sqlite3Callback(void * unused, int count, char **data, char **columns
  * @param dataBase The database pointer so we can do the sqlite3 queries
  * @return void* 
  */
-void *accountInformationSql(const char * username, sqlite3 * dataBase) {
+void accountInformationSql(const char * username, sqlite3 * dataBase) {
 
     char * query = sqlite3_mprintf("SELECT * FROM USER_INFO where USERNAME = '%s'", username);
     char * getAccountInfoErr = 0;
     sqlite3_exec(dataBase, query, sqlite3Callback, NULL, &getAccountInfoErr);
     // TODO: Maybe handle error?
-
-    return 0;
 } 
 
 /**
@@ -221,7 +223,17 @@ bool loginToAccount(sqlite3 * dataBase) {
  */
 void bankingSql(void) {
     sqlite3 * dataBase = NULL;
-    sqlite3_open("userInfo.db", &dataBase);
+
+    char * fileName = "userInfo.db";
+
+    const int lenProjDir  = strlen(PROJECT_DIR);
+    const int fileNameLen = strlen(fileName);
+
+    char pathAndFileName[lenProjDir + fileNameLen + 2];
+
+    sprintf(pathAndFileName, "%s/%s", PROJECT_DIR, fileName);
+
+    sqlite3_open(pathAndFileName, &dataBase);
 
     // We need to now create the table in the database, assuming it doesn't already exist.
     char * errMsg;
